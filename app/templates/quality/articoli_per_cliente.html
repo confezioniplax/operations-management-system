@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% macro fmt_num(v) -%}
+{%- if v is none -%}
+-
+{%- else -%}
+{{ ('%.3f' % (v | float)).rstrip('0').rstrip('.') }}
+{%- endif -%}
+{%- endmacro %}
+
+{% block title %}Quality – Articoli per Cliente{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="mb-3">Quality – Articoli per Cliente</h1>
+
+  <form class="row g-2 mb-3" method="get">
+
+    <div class="col-md-2">
+      <label class="form-label">Anno</label>
+      <input type="text" name="year" class="form-control" value="{{ filters.year or '' }}">
+    </div>
+
+    <div class="col-md-4 position-relative">
+      <label class="form-label">Cliente</label>
+      <input type="text" id="clienteQuery" class="form-control" placeholder="Cerca cliente (ragione sociale o codice)" autocomplete="off">
+      <div id="clienteLoading" class="position-absolute" style="right: 0.75rem; top: 2.6rem; display: none;">
+        <div class="spinner-border spinner-border-sm text-secondary" role="status" aria-hidden="true"></div>
+      </div>
+      <input type="hidden" name="codicecf" id="codicecfHidden" value="{{ filters.codicecf or '' }}">
+      <div id="clientiDropdown" class="dropdown-menu w-100" style="max-height: 300px; overflow:auto;"></div>
+      <div class="form-text">Digita almeno 2 caratteri e scegli dalla lista.</div>
+    </div>
+
+    <input type="hidden" name="limit" value="{{ filters.limit or 50 }}">
+    <input type="hidden" name="offset" id="offsetField" value="{{ filters.offset or 0 }}">
+
+    <div class="col-md-6 mt-2">
+      <label class="form-label">Articolo / testo riga</label>
+      <input type="text" name="articolo_search" class="form-control"
+        placeholder="Codice articolo o parte di descrizione" value="{{ filters.articolo_search or '' }}">
+    </div>
+
+    <div class="col-md-12 mt-3">
+      <button class="btn btn-primary" id="filterBtn" type="submit">Filtra</button>
+      <a href="{{ url_for('view_quality_articoli_cliente') }}" class="btn btn-secondary">Reset</a>
+    </div>
+  </form>
+
+  <table class="table table-sm table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Cliente</th>
+        <th>Articolo</th>
+        <th>Descrizione riga</th>
+        <th>Componenti</th>
+        <th>Q.tà</th>
+        <th>UM</th>
+        <th>Documento</th>
+        <th>Data</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if items %}
+      {% for row in items %}
+      {% set detail_url = url_for(
+        'view_quality_document_detail',
+        tipodoc=row.tipodoc,
+        esanno=row.esanno,
+        numerodoc=row.numerodoc
+      ) %}
+      <tr>
+        <td>{{ row.cliente_nome }} ({{ row.codicecf }})</td>
+        <td>
+          <strong>{{ row.codicearti }}</strong>
+          <div class="text-muted small">{{ row.descrizione_articolo }}</div>
+        </td>
+        <td>{{ row.descrizione_riga }}</td>
+        <td>{{ row.componenti }}</td>
+        <td>{{ fmt_num(row.quantita) }}</td>
+        <td>{{ row.unmisura }}</td>
+        <td>
+          <a href="{{ detail_url }}">{{ row.tipodoc }} {{ row.esanno }}/{{ row.numerodoc }}</a>
+        </td>
+        <td>{{ row.datadoc }}</td>
+      </tr>
+      {% endfor %}
+      {% else %}
+      <tr>
+        <td colspan="7" class="text-center text-muted">Nessun articolo trovato con i filtri selezionati.</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+  {% if items and not filters.codicecf %}
+  <div class="d-flex justify-content-between align-items-center my-3">
+    <div class="text-muted small">Pagina {{ (filters.offset|int // (filters.limit|int or 50)) + 1 }}</div>
+    <div>
+      <button type="button" id="prevPageBtn" class="btn btn-outline-secondary me-2" {% if (filters.offset|int) <= 0 %}disabled{% endif %}>Indietro</button>
+      <button type="button" id="nextPageBtn" class="btn btn-outline-primary">Avanti</button>
+    </div>
+  </div>
+  {% endif %}
+  <div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 align-items-center justify-content-center d-none" style="background: rgba(255,255,255,0.6); z-index: 1050;">
+    <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  const qInput = document.getElementById('clienteQuery');
+  const hidden = document.getElementById('codicecfHidden');
+  const menu = document.getElementById('clientiDropdown');
+  const formEl = document.querySelector('form');
+  const overlay = document.getElementById('loadingOverlay');
+  const inlineSpinner = document.getElementById('clienteLoading');
+  const filterBtn = document.getElementById('filterBtn');
+  const resetBtn = document.querySelector('a.btn.btn-secondary');
+  let debounce;
+  let searchController = null;
+
+  function resetLoading() {
+    setInlineLoading(false);
+    setLoading(false);
+  }
+
+  function setLoading(on) {
+    if (overlay) {
+      if (on) { overlay.classList.remove('d-none'); overlay.classList.add('d-flex'); }
+      else { overlay.classList.add('d-none'); overlay.classList.remove('d-flex'); }
+    }
+    // Non disabilitiamo gli input per preservare i valori nella submit;
+    // l'overlay full-screen intercetta i click e blocca l'interazione.
+  }
+
+  function setInlineLoading(on) {
+    if (inlineSpinner) inlineSpinner.style.display = on ? 'block' : 'none';
+  }
+
+  function hideMenu() {
+    menu.classList.remove('show');
+    menu.innerHTML = '';
+  }
+
+  function showMenu(items) {
+    menu.innerHTML = '';
+    if (!items || items.length === 0) { hideMenu(); return; }
+    items.forEach(it => {
+      const code = (it.codicecf || '').trim();
+      const name = (it.cliente_nome || '').trim();
+      if (!code) return;
+      const a = document.createElement('button');
+      a.type = 'button';
+      a.className = 'dropdown-item';
+      a.textContent = name ? `${name} (${code})` : code;
+      a.addEventListener('click', () => {
+        hidden.value = code;
+        qInput.value = a.textContent;
+        hideMenu();
+      });
+      menu.appendChild(a);
+    });
+    menu.classList.add('show');
+  }
+
+  async function searchCustomers(q) {
+    try {
+      setInlineLoading(true);
+      const url = `/api/quality/customers?search=${encodeURIComponent(q)}&limit=25`;
+      // aborta eventuale richiesta precedente
+      if (searchController) {
+        try { searchController.abort(); } catch (_) {}
+      }
+      searchController = new AbortController();
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin', signal: searchController.signal });
+      const data = await res.json();
+      showMenu((data && data.items) ? data.items : []);
+    } catch (e) {
+      hideMenu();
+    } finally {
+      setInlineLoading(false);
+      searchController = null;
+    }
+  }
+
+  qInput.addEventListener('input', () => {
+    const q = qInput.value.trim();
+    hidden.value = '';
+    if (debounce) clearTimeout(debounce);
+    // aborta in tempo reale se si digita nuovamente
+    if (searchController) {
+      try { searchController.abort(); } catch (_) {}
+      searchController = null;
+      setInlineLoading(false);
+    }
+    if (q.length < 2) { hideMenu(); setInlineLoading(false); return; }
+    debounce = setTimeout(() => searchCustomers(q), 200);
+  });
+
+  document.addEventListener('click', (evt) => {
+    if (!menu.contains(evt.target) && evt.target !== qInput) hideMenu();
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+    if (hidden.value) {
+      qInput.value = hidden.value;
+    }
+    resetLoading();
+  });
+
+  window.addEventListener('pageshow', () => {
+    resetLoading();
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => resetLoading());
+  }
+
+  const prevPageBtn = document.getElementById('prevPageBtn');
+  if (prevPageBtn) {
+    prevPageBtn.addEventListener('click', () => {
+      const form = prevPageBtn.closest('form');
+      const off = document.getElementById('offsetField');
+      const lim = document.querySelector('input[name="limit"]');
+      const curOff = parseInt(off.value || '0', 10);
+      const curLim = parseInt(lim.value || '50', 10);
+      off.value = String(Math.max(0, curOff - curLim));
+      setLoading(true);
+      form.submit();
+    });
+  }
+  const nextPageBtn = document.getElementById('nextPageBtn');
+  if (nextPageBtn) {
+    nextPageBtn.addEventListener('click', () => {
+      const form = nextPageBtn.closest('form');
+      const off = document.getElementById('offsetField');
+      const lim = document.querySelector('input[name="limit"]');
+      const curOff = parseInt(off.value || '0', 10);
+      const curLim = parseInt(lim.value || '50', 10);
+      off.value = String(curOff + curLim);
+      setLoading(true);
+      form.submit();
+    });
+  }
+  if (filterBtn) {
+    filterBtn.addEventListener('click', () => setLoading(true));
+  }
+</script>
+{% endblock %}

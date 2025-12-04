@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}
+Quality – Document {{ header.tipodoc }} {{ header.esanno }}/{{ header.numerodoc }}
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <a href="{{ url_for('view_quality_documents') }}" class="btn btn-link mb-3">
+    &larr; Torna all'elenco documents
+  </a>
+
+  <h1 class="mb-3">
+    Quality – Document {{ header.tipodoc }} {{ header.esanno }}/{{ header.numerodoc }}
+  </h1>
+
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <h5>Cliente</h5>
+      <p>
+        <strong>{{ header.cliente_nome }}</strong><br>
+        Codice: {{ header.codicecf }}<br>
+        P.IVA: {{ header.piva or '–' }}
+        {% if header.cfisc %}
+        – CF: {{ header.cfisc }}
+        {% endif %}<br>
+        {% if header.ddindir %}
+        {{ header.ddindir }}
+        {% if header.ddcap or header.ddlocal %}
+        – {{ header.ddcap }} {{ header.ddlocal }}
+        {% endif %}
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="col-md-6">
+      <h5>Documento</h5>
+      <p>
+        Data doc: {{ header.datadoc }}<br>
+        Magazzino partenza: {{ header.magpartenz }}<br>
+        Magazzino arrivo: {{ header.magarrivo }}<br>
+        Data consegna: {{ header.dataconseg }}<br>
+      
+        Tot. merce:
+        {{ "{:.2f}".format(header.totmerce) if header.totmerce is not none else "" }}<br>
+      
+        Tot. doc:
+        {{ "{:.2f}".format(header.totdoc) if header.totdoc is not none else "" }}
+      
+        {% if header.totimp or header.totiva %}
+        (imp.: {{ "{:.2f}".format(header.totimp) if header.totimp is not none else "" }}
+        – IVA: {{ "{:.2f}".format(header.totiva) if header.totiva is not none else "" }})
+        {% endif %}
+      </p>
+
+    </div>
+  </div>
+
+  {% if header.oggetto %}
+  <div class="mb-3">
+    <h5>Oggetto</h5>
+    <p>{{ header.oggetto }}</p>
+  </div>
+  {% endif %}
+
+  <h4 class="mt-4 mb-2">Righe documento</h4>
+  <table class="table table-sm table-striped align-middle">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Articolo</th>
+        <th>Descrizione</th>
+        <th>Pass</th>
+        <th>Fascia</th>
+        <th>Componenti</th>
+        <th>Q.tà</th>
+        <th>UM</th>
+        <th>Prezzo</th>
+        <th>Importo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in lines %}
+      <tr>
+        <td>{{ r.numeroriga }}</td>
+        <td>{{ r.codicearti }}</td>
+        <td>{{ r.descrizione_riga or r.descrizione_articolo }}</td>
+    
+        {# Pass e Fascia senza decimali #}
+        <td>
+          {{ "{:.0f}".format(r.pass) if r.pass is not none else "" }}
+        </td>
+        <td>
+          {{ "{:.0f}".format(r.fascia) if r.fascia is not none else "" }}
+        </td>
+    
+        <td>{{ r.componenti or '' }}</td>
+    
+        {# Q.tà a 3 decimali #}
+        <td>
+          {{ "{:.3f}".format(r.quantita) if r.quantita is not none else "" }}
+        </td>
+    
+        <td>{{ r.unmisura }}</td>
+    
+        {# Prezzo a 4 decimali, Importo a 2 decimali #}
+        <td>
+          {{ "{:.4f}".format(r.prezzoun) if r.prezzoun is not none else "" }}
+        </td>
+        <td>
+          {{ "{:.2f}".format(r.prezzotot) if r.prezzotot is not none else "" }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+
+  </table>
+
+  {% if header.condizioni %}
+  <div class="mt-4">
+    <h5>Condizioni</h5>
+    <pre class="small">{{ header.condizioni }}</pre>
+  </div>
+  {% endif %}
+
+  {% if header.esclusioni %}
+  <div class="mt-3">
+    <h5>Esclusioni</h5>
+    <pre class="small">{{ header.esclusioni }}</pre>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

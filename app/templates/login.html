@@ -1,0 +1,156 @@
+<!-- 
+  MIT License
+  
+  Copyright (c) 2024 Riccardo Leonelli
+  
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+  
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+  
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+-->
+
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-image: url('/static/backgrounds/login_background_1.avif');
+            background-size: cover;
+            background-position: center;
+        }
+
+        form {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+
+        label,
+        input {
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        form button {
+            display: block;
+            margin: 10px auto 0 auto;
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        form button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Responsive styles */
+        @media screen and (max-width: 600px) {
+            form {
+                width: 90%;
+                margin: 0 auto;
+            }
+
+            label,
+            input,
+            button {
+                width: 100%;
+                box-sizing: border-box;
+            }
+        }
+    </style>
+    <link rel="icon" href="/static/favico.ico" type="image/x-icon">
+</head>
+
+<body>
+    <form id="loginForm" onsubmit="handleLogin(event)">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required><br>
+
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required><br>
+
+        <button type="submit">Accedi</button>
+    </form>
+
+<script>
+    async function handleLogin(event) {
+        event.preventDefault();
+
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+
+        if (!username || !password) {
+            alert('Inserisci sia username che password');
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            const resp = await fetch('/token', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (resp.ok) {
+                // dopo il login si entra sempre nella pagina principale protetta (QUALITY)
+                window.location.href = '/quality/documents';
+                return;
+            }
+
+            // ---- Gestione errori coerente con il backend ----
+            let msg = 'Login fallito!';
+            try {
+                const err = await resp.json();
+                if (typeof err === 'string') {
+                    if (err === 'user_not_found') msg = 'Utente non trovato';
+                    else if (err === 'username_password_error') msg = 'Username o password errati';
+                    else msg = err;
+                } else if (err?.detail) {
+                    msg = err.detail;
+                }
+            } catch {
+                // ignore JSON parse errors
+            }
+
+            alert(msg);
+        } catch (e) {
+            console.error('Errore durante il login:', e);
+            alert('Si è verificato un errore durante il login.');
+        }
+    }
+</script>
+
+</body>
+
+</html>

@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{# --- Macro per formattare numeri DECIMAL (evita 0E-8, taglia zeri) --- #}
+{% macro fmt_num(v) -%}
+{%- if v is none -%}
+-
+{%- else -%}
+{# converte a float, 3 decimali, poi toglie zeri e punto finale #}
+{{ ('%.3f' % (v | float)).rstrip('0').rstrip('.') }}
+{%- endif -%}
+{%- endmacro %}
+
+{% block title %}Quality – Documents{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h1 class="mb-3">Quality – Documents</h1>
+
+  <form class="row g-2 mb-3" method="get">
+    <!-- RIGA 1: tipo doc, numero doc, anno -->
+    <div class="col-md-2">
+      <label class="form-label">Tipo doc</label>
+      <input type="text" name="tipodoc" class="form-control" placeholder="OC, ON, BA..."
+        value="{{ filters.tipodoc or '' }}">
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label">Numero doc</label>
+      <input type="text" name="numerodoc" class="form-control" placeholder="Numero completo o parziale"
+        value="{{ filters.numerodoc or '' }}">
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Anno</label>
+      <input type="text" name="year" class="form-control" value="{{ filters.year or '' }}">
+    </div>
+
+    <!-- RIGA 2: fornitore/anagrafica -->
+    <div class="col-md-2">
+      <label class="form-label">Codice fornitore</label>
+      <input type="text" name="codicecf" class="form-control" value="{{ filters.codicecf or '' }}">
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label">Fornitore / Cliente (ragione sociale)</label>
+      <input type="text" name="fornitore_search" class="form-control" placeholder="Parte di nome"
+        value="{{ filters.fornitore_search or '' }}">
+    </div>
+
+    <!-- RIGA 3: articolo / testo in riga documento -->
+    <div class="col-md-6 mt-2">
+      <label class="form-label">Articolo / testo in riga documento</label>
+      <input type="text" name="articolo_search" class="form-control"
+        placeholder="Codice articolo o parte di descrizione" value="{{ filters.articolo_search or '' }}">
+    </div>
+
+    <div class="col-md-12 mt-3">
+      <button class="btn btn-primary" id="filterBtn" type="submit">Filtra</button>
+      <a href="{{ url_for('view_quality_documents') }}" class="btn btn-secondary">Reset</a>
+    </div>
+  </form>
+
+  <table class="table table-sm table-striped align-middle">
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Tipo</th>
+        <th>Anno</th>
+        <th>Numero</th>
+        <th>Cliente</th>
+        <th>Tot. merce</th>
+        <th>Tot. doc</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if items %}
+      {% for row in items %}
+      {% set detail_url = url_for(
+      'view_quality_document_detail',
+      tipodoc=row.tipodoc,
+      esanno=row.esanno,
+      numerodoc=row.numerodoc
+      ) %}
+      <tr class="clickable-row" data-href="{{ detail_url }}">
+        <td>{{ row.datadoc }}</td>
+        <td>{{ row.tipodoc }}</td>
+        <td>{{ row.esanno }}</td>
+        <td>
+          <a href="{{ detail_url }}">
+            {{ row.numerodoc }}
+          </a>
+        </td>
+        <td>{{ row.cliente_nome }} ({{ row.codicecf }})</td>
+        <td>{{ fmt_num(row.totmerce) }}</td>
+        <td>{{ fmt_num(row.totdoc) }}</td>
+      </tr>
+      {% endfor %}
+      {% else %}
+      <tr>
+        <td colspan="7" class="text-center text-muted">
+          Nessun document qualità trovato con i filtri selezionati.
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+  <div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 align-items-center justify-content-center d-none" style="background: rgba(255,255,255,0.6); z-index: 1050;">
+    <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  const formEl = document.querySelector('form');
+  const overlay = document.getElementById('loadingOverlay');
+  const filterBtn = document.getElementById('filterBtn');
+  const resetBtn = document.querySelector('a.btn.btn-secondary');
+
+  function resetLoading() {
+    setLoading(false);
+  }
+
+  function setLoading(on) {
+    if (overlay) {
+      if (on) { overlay.classList.remove('d-none'); overlay.classList.add('d-flex'); }
+      else { overlay.classList.add('d-none'); overlay.classList.remove('d-flex'); }
+    }
+    // Non disabilitiamo fisicamente gli input per preservare i valori;
+    // l'overlay blocca l'interazione durante il caricamento.
+  }
+
+  if (filterBtn) {
+    filterBtn.addEventListener('click', () => setLoading(true));
+  }
+
+  window.addEventListener('DOMContentLoaded', resetLoading);
+  window.addEventListener('pageshow', resetLoading);
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', resetLoading);
+  }
+
+  document.querySelectorAll('tr.clickable-row').forEach(tr => {
+    tr.addEventListener('click', function (e) {
+      if (e.target.closest('a')) {
+        return;
+      }
+      const href = this.dataset.href;
+      if (href) {
+        window.location.href = href;
+      }
+    });
+  });
+</script>
+{% endblock %}
